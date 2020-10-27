@@ -18,7 +18,6 @@
 */
 
 #pragma once
-#include<map>
 #ifndef HACK_H
 #define HACK_H
 
@@ -30,6 +29,7 @@
 #define INITPTR_INVALID_GLOBAL  1 << 5
 #define INITPTR_INVALID_PLAYER_LIST 1 << 6
 #define INITPTR_INVALID_REPLAY_INTERFACE 1 << 7
+#define INITPTR_INVALID_UNK_MODEL 1 << 7
 class trainer
 {
 	public:
@@ -50,8 +50,8 @@ class hack : public trainer
 		vehicle m_vehicle;
 		weapon	m_weapon;
 		tunable m_tunable;
-		global	m_global;
 		replayInterface	m_replayInterface;
+		unkModel m_unkModel;
 		std::string m_mpId;
 		std::deque<std::pair<unsigned int,int>> m_dStat;
 		ImpactExplosionEnum m_explosion;
@@ -74,9 +74,13 @@ class hack : public trainer
 		void	fillAmmo();
 		void    consumeStatQueue();
 		void	killAllNpc(float* arg);
-		void	renderPlayerList(int parent, int playerList[32]);
+		void	tpAllNpc(float* arg);
+		void	tpHostilityNpc(float* arg);
+		void	killHostilityNpc(float* arg);
+		void	killHostilityNpcVeh(float* arg);
+		void	renderPlayerList();
 		void	setImpactExplosion(float* arg);
-		void	fillAllAmmo(float* arg);
+		//void	fillAllAmmo(float* arg);
 		void	healVehicle(float* arg);
 		void	healPlayer(float* arg);
 		void	suicide(float* arg);
@@ -86,6 +90,7 @@ class hack : public trainer
 		void	casinoStat(float* arg);
 		void	casinoStatBitSet1(float* arg);
 		void	casinoStatBitSet2(float* arg);
+		void	casinoHeistCut(feat* feature, int playerIndex);
 		void	unlockHeistCars(float* arg);
 		void	unlockLSC(float* arg);
 		void	unlockWeaponCamos(float* arg);
@@ -96,6 +101,7 @@ class hack : public trainer
 		void	loadSession(float* arg);
 		void	forwardTeleport(float* arg);
 		void	spawnVehicle(float* arg);
+		void	selfDropWeapon(float* arg);
 		void	selfDropMoney(feat* feature);
 		void	waterProof(feat* feature);
 		void	undeadOffradar(feat* feature);
@@ -148,6 +154,27 @@ class hack : public trainer
 		void	tunableOrbitalCannonCooldown(feat* feature);
 		void	tunableBunkerResearch(feat* feature);
 		void	tunableAntiIdleKick(feat* feature);
+		void	removeSuicideCooldown(feat* feature);
+		void	removePassiveModeCooldown(feat* feature);
+		void	allowSellOnNonPublic(feat* feature);
+		void	instantBullShark(feat* feature);
+		void	bullSharkDrop(float* arg);
+		void	ammoDrop(float* arg);
+		void	miniGunDrop(float* arg);
+		void	boatTaxi(float* arg);
+		void	heliTaxi(float* arg);
+		void	backupHeli(float* arg);
+		void	airstrike(float* arg);
+		void	offRadar(feat* feature);
+		void	disableThePhone(feat* feature);
+		void	antiCEOKick(feat* feature);
+		void	antiKickToSP(feat* feature);
+		void	antiApartmentTp(feat* feature);
+		void	antiRemoteBounty(feat* feature);
+		void	antiWeatherControl(feat* feature);
+		void	antiRemoteVehicleKick(feat* feature);
+		void	antiRemoteForceMission(feat* feature);
+		void	triggerBot(feat* feature);
 		void	about(float* arg);
 
 	private:
@@ -162,27 +189,22 @@ class hack : public trainer
 					m_dwpTunableBase,
 					m_dwpGlobalBase,
 					m_dwpPlayerListBase,
-					m_dwpReplayInterfaceBase;
-		bool		m_bInit,m_bSelfDropInit;
+					m_dwpReplayInterfaceBase,
+					m_dwpUnkModelBase;
+		bool		m_bInit,m_bSelfDropInit,m_bMouseDown;
 
 		void	getWaypoint();
 		void	getObjective();
 		void	dStatPushBack(unsigned int hash, int value);
+		void	callMerryweather(std::ptrdiff_t index);
+		int		getPlayerId();
+		int		getNetworkTime();
+		void	setCasinoHeistCut(int playerIndex, int cut);
+		int		getCasinoHeistCut(int playerIndex);
+		void	createAmbientPickup(unsigned int pickupHash, float posX, float posY, float posZ, int value, unsigned int modelHash);
+		void	blockScriptEvents(feat* feature, std::ptrdiff_t index);
 
-		unsigned int string_to_hash(std::string input,std::string pre = "MP0_")
-		{
-			unsigned int num1 = 0U;
-			input = pre + input;
-			for (char c : input)
-			{
-				unsigned int num2 = num1 + (unsigned int)tolower(c);
-				unsigned int num3 = num2 + (num2 << 10);
-				num1 = num3 ^ num3 >> 6;
-			}
-			unsigned int num4 = num1 + (num1 << 3);
-			unsigned int num5 = num4 ^ num4 >> 11;
-			return num5 + (num5 << 15);
-		}
+		unsigned int string_to_hash(std::string input, std::string pre = "MP0_");
 };
 
 extern hack*		g_pHack;

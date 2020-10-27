@@ -16,10 +16,8 @@
 	You should have received a copy of the GNU General Public License along
 	with subVersion GTA:O SC External Hack.  If not, see <http://www.gnu.org/licenses/>.
 */
-
 #include "stdafx.h"
-#include <string>
-
+#include "scriptGlobal.h"
 /*
 	TRAINER
 */
@@ -36,7 +34,7 @@ bool	trainer::checkKeyState(int key)
 {
 	if
 		(
-			clock() - m_keyTmr > 100 &&
+			clock() - m_keyTmr > 10 &&
 			(GetAsyncKeyState(key) & 0x8001) == 0x8001
 			)
 	{
@@ -52,7 +50,9 @@ bool	trainer::checkKeyState(int key)
 */
 
 
-hack::hack() {}
+hack::hack() {
+	m_explosion = ImpactExplosionEnum::DefaultBullets;
+}
 
 hack::~hack() {}
 
@@ -60,7 +60,7 @@ void hack::checkKeys()
 {
 	if (checkKeyState(g_pSettings->m_iKeys[keyExit]))
 	{
-		g_bKillHack = true;
+		g_bKillKeys = true;
 		killProgram();
 		return;
 	}
@@ -88,7 +88,7 @@ void hack::checkKeys()
 	}
 	if (checkKeyState(g_pSettings->m_iKeys[keyHotAmmo]))
 	{
-		g_pHack->fillAllAmmo(NULL);
+		g_pHack->fillAmmo();
 		return;
 	}
 
@@ -135,8 +135,10 @@ void hack::checkKeys()
 		m_player.getPos();
 		tp->m_v3Pos.x = m_player.m_v3Pos.x;
 		tp->m_v3Pos.y = m_player.m_v3Pos.y;
+		tp->m_v3Pos.z = m_player.m_v3Pos.z;
 		g_pSettings->m_iniParser.setValue<float>(tp->m_szIniKey + "_x", m_player.m_v3Pos.x, "Teleport");
 		g_pSettings->m_iniParser.setValue<float>(tp->m_szIniKey + "_y", m_player.m_v3Pos.y, "Teleport");
+		g_pSettings->m_iniParser.setValue<float>(tp->m_szIniKey + "_z", m_player.m_v3Pos.y, "Teleport");
 		return;
 	}
 	if (checkKeyState(g_pSettings->m_iKeys[keyMenuSelect]))
@@ -153,7 +155,6 @@ void hack::checkKeys()
 
 BYTE hack::initPointers()
 {
-
 	BYTE r = 0;
 
 	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_hModule + ADDRESS_WORLD, &m_dwpWorldBase);
@@ -168,7 +169,6 @@ BYTE hack::initPointers()
 	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_hModule + ADDRESS_GLOBAL, &m_dwpGlobalBase);
 	if (m_dwpGlobalBase == 0)
 		return INITPTR_INVALID_GLOBAL;
-	m_global.m_dwpGlobalBase = m_dwpGlobalBase;
 	m_mpId = "MP0_";
 
 	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_hModule + ADDRESS_REPLAY_INTERFACE, &m_dwpReplayInterfaceBase);
@@ -176,8 +176,16 @@ BYTE hack::initPointers()
 		return INITPTR_INVALID_REPLAY_INTERFACE;
 	m_replayInterface.m_dwpPedInterface = m_dwpReplayInterfaceBase;
 	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpReplayInterfaceBase + OFFSET_REPLAY_PED_INTERFACE, &m_replayInterface.m_dwpPedInterface);
-	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_replayInterface.m_dwpPedInterface + OFFSET_PED_INTERFACE_PED_LIST, &m_replayInterface.m_dwpPedList);
+	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_replayInterface.m_dwpPedInterface + OFFSET_INTERFACE_LIST, &m_replayInterface.m_dwpPedList);
+	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpReplayInterfaceBase + OFFSET_REPLAY_PICKUP_INTERFACE, &m_replayInterface.m_dwpPickUpInterface);
+	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_replayInterface.m_dwpPickUpInterface + OFFSET_INTERFACE_LIST, &m_replayInterface.m_dwpPickUpList);
 
+	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_hModule + ADDRESS_UNK_MODEL, &m_dwpUnkModelBase);
+	if (m_dwpUnkModelBase == 0)
+		return INITPTR_INVALID_UNK_MODEL;
+	m_unkModel.m_dwpUnkModelBase = m_dwpUnkModelBase;
+	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpUnkModelBase + 0, &m_unkModel.m_dwpUnkModelStruct);
+	
 	g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpWorldBase + OFFSET_PLAYER, &m_dwpPlayerBase);
 	if (m_dwpPlayerBase == 0)
 		return INITPTR_INVALID_PLAYER;
@@ -224,30 +232,42 @@ void hack::getWaypoint()
 		if (n > 0 && buf[0] == 8 && buf[1] == 84)
 		{
 			g_pMemMan->readMem<v2>((DWORD_PTR)n + 0x10, &m_v2Waypoint);
+			break;
 		}
 	}
 
-	//g_pMemMan->readMem<v2>((DWORD_PTR) m_hModule + ADDRESS_WAYPOINT, &m_v2Waypoint);
 	return;
 }
 
 void hack::getObjective()
 {
+	static int ColorYellowMission = 66;
+	static int ColorYellow = 5;
+	static int ColorWhite = 0;
+	static int ColorGreen = 2;
+	static int SpriteCrateDrop = 306;
+	static int SpriteStandard = 1;
+	static int SpriteRaceFinish = 38;
+
 	DWORD_PTR a = (DWORD_PTR)m_hModule + ADDRESS_BLIP;
 	for (size_t i = 2000; i > 1; i--)
 	{
 		DWORD64 n;
-		DWORD buf[2];
+		DWORD dwColor,dwIcon;
 		g_pMemMan->readMem<DWORD64>((DWORD_PTR)a + (i * 8), &n);
-		g_pMemMan->readMem<DWORD>((DWORD_PTR)n + 0x40, &buf[0]);
-		g_pMemMan->readMem<DWORD>((DWORD_PTR)n + 0x48, &buf[1]);
-		if (n > 0 && buf[0] == 1 && (buf[1] == 5 || buf[1] == 60 || buf[1] == 66))
+		g_pMemMan->readMem<DWORD>((DWORD_PTR)n + 0x40, &dwIcon);
+		g_pMemMan->readMem<DWORD>((DWORD_PTR)n + 0x48, &dwColor);
+		if (n > 0 && dwColor == ColorYellowMission || dwIcon == SpriteStandard
+			&& dwColor == ColorYellow || dwIcon == SpriteStandard
+			&& dwColor == ColorWhite || dwIcon == SpriteRaceFinish
+			&& dwColor == ColorGreen || dwIcon == SpriteStandard
+			&& dwColor == SpriteCrateDrop)
 		{
 			g_pMemMan->readMem<v3>((DWORD_PTR)n + 0x10, &m_v3Objective);
+			break;
 		}
 	}
 
-	//g_pMemMan->readMem<v3>((DWORD_PTR) m_hModule + ADDRESS_OBJECTIVE, &m_v3Objective);
 	return;
 }
 
@@ -358,28 +378,28 @@ void hack::setImpactExplosion(float* arg)
 	this->m_explosion = (ImpactExplosionEnum)((DWORD)*arg);
 }
 
-void hack::fillAllAmmo(float* arg)
-{
-	for (size_t i = 0; i < 0x400; i++)
-	{
-		DWORD_PTR dwpWeapon, dwpAmmoInfo, dwpAmmoPtr1, dwpAmmoPtr2;
-		DWORD dwCurAmmo, dwMaxAmmo;
-		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpWeaponBase + i, &dwpWeapon);
-		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpWeapon + OFFSET_WEAPON_AMMOINFO, &dwpAmmoInfo);
-
-		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpAmmoInfo + OFFSET_WEAPON_AMMOINFO_CUR_1, &dwpAmmoPtr1);
-		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpAmmoPtr1 + OFFSET_WEAPON_AMMOINFO_CUR_2, &dwpAmmoPtr2);
-		g_pMemMan->readMem<DWORD>((DWORD_PTR)dwpAmmoPtr2 + OFFSET_WEAPON_AMMOINFO_CURAMMO, &dwCurAmmo);
-		if (dwCurAmmo >= 0 && dwCurAmmo <= 9999)
-		{
-			g_pMemMan->readMem<DWORD>((DWORD_PTR)dwpAmmoInfo + OFFSET_WEAPON_AMMOINFO_MAX, &dwMaxAmmo);
-			if (dwMaxAmmo >= 20 && dwMaxAmmo <= 9999 && dwCurAmmo < dwMaxAmmo)
-			{
-				g_pMemMan->writeMem<DWORD>((DWORD_PTR)dwpAmmoPtr2 + OFFSET_WEAPON_AMMOINFO_CURAMMO, &dwMaxAmmo);
-			}
-		}
-	}
-}
+//void hack::fillAllAmmo(float* arg)
+//{
+//	for (size_t i = 0; i < 0x400; i++)
+//	{
+//		DWORD_PTR dwpWeapon, dwpAmmoInfo, dwpAmmoPtr1, dwpAmmoPtr2;
+//		DWORD dwCurAmmo, dwMaxAmmo;
+//		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)m_dwpWeaponBase + i, &dwpWeapon);
+//		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpWeapon + OFFSET_WEAPON_AMMOINFO, &dwpAmmoInfo);
+//
+//		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpAmmoInfo + OFFSET_WEAPON_AMMOINFO_CUR_1, &dwpAmmoPtr1);
+//		g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpAmmoPtr1 + OFFSET_WEAPON_AMMOINFO_CUR_2, &dwpAmmoPtr2);
+//		g_pMemMan->readMem<DWORD>((DWORD_PTR)dwpAmmoPtr2 + OFFSET_WEAPON_AMMOINFO_CURAMMO, &dwCurAmmo);
+//		if (dwCurAmmo >= 0 && dwCurAmmo <= 9999)
+//		{
+//			g_pMemMan->readMem<DWORD>((DWORD_PTR)dwpAmmoInfo + OFFSET_WEAPON_AMMOINFO_MAX, &dwMaxAmmo);
+//			if (dwMaxAmmo >= 20 && dwMaxAmmo <= 9999 && dwCurAmmo < dwMaxAmmo)
+//			{
+//				g_pMemMan->writeMem<DWORD>((DWORD_PTR)dwpAmmoPtr2 + OFFSET_WEAPON_AMMOINFO_CURAMMO, &dwMaxAmmo);
+//			}
+//		}
+//	}
+//}
 
 void hack::healVehicle(float* arg)
 {
@@ -478,13 +498,13 @@ void hack::casinoStatBitSet2(float* arg)
 		dStatPushBack(string_to_hash("H3OPT_KEYLEVELS"), 2);
 		break;
 	case 2:
-		dStatPushBack(string_to_hash("H3OPT_CREWWEAP"), 5);
+		dStatPushBack(string_to_hash("H3OPT_CREWWEAP"), 6);
 		break;
 	case 3:
-		dStatPushBack(string_to_hash("H3OPT_CREWDRIVER"), 5);
+		dStatPushBack(string_to_hash("H3OPT_CREWDRIVER"), 6);
 		break;
 	case 4:
-		dStatPushBack(string_to_hash("H3OPT_CREWHACKER"), 4);
+		dStatPushBack(string_to_hash("H3OPT_CREWHACKER"), 5);
 		break;
 	case 5:
 		dStatPushBack(string_to_hash("H3OPT_VEHS"), 0);
@@ -507,14 +527,31 @@ void hack::casinoStatBitSet2(float* arg)
 	default:
 		dStatPushBack(string_to_hash("H3OPT_DISRUPTSHIP"), 3);
 		dStatPushBack(string_to_hash("H3OPT_KEYLEVELS"), 2);
-		dStatPushBack(string_to_hash("H3OPT_CREWWEAP"), 5);
-		dStatPushBack(string_to_hash("H3OPT_CREWDRIVER"), 5);
-		dStatPushBack(string_to_hash("H3OPT_CREWHACKER"), 4);
+		dStatPushBack(string_to_hash("H3OPT_CREWWEAP"), 6);
+		dStatPushBack(string_to_hash("H3OPT_CREWDRIVER"), 6);
+		dStatPushBack(string_to_hash("H3OPT_CREWHACKER"), 5);
 		dStatPushBack(string_to_hash("H3OPT_VEHS"), 3);
 		dStatPushBack(string_to_hash("H3OPT_WEAPS"), 0);
 		break;
 	}
 	dStatPushBack(string_to_hash("H3OPT_BITSET0"), -1);
+}
+
+void hack::casinoHeistCut(feat* feature, int playerIndex)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	float fValue = static_cast<featSlider*>(feature)->m_fValue;
+	if (getCasinoHeistCut(playerIndex) != (int)fValue)
+		setCasinoHeistCut(playerIndex, (int)fValue);
+
+	return;
 }
 
 void hack::unlockHeistCars(float* arg)
@@ -907,33 +944,32 @@ void hack::unlockClothes(float* arg)
 	}
 	for (size_t i = 0; i <= 31; i++)
 	{
-
 		dStatPushBack(string_to_hash("ADMIN_CLOTHES_GV_BS_" + std::to_string(i)), -1);
 	}
 }
 
 void hack::intoPV(float* arg)
 {
-	if (m_global.initIntoPVPtr(m_hModule))
-	{
-		m_global.setIntoPersonalVehicle(1);
-		Sleep(500);
-		m_global.getIntoPersonalVehicle();
-		if (m_global.m_dwIntoPersonalVehicle == 1)
-		{
-			m_global.setIntoPersonalVehicle(0);
-		}
-	}
+	if (scriptGlobal(2537071).at(296).as<int>() != -1)
+		scriptGlobal(2409287).at(8).as<int>() = 1;
 }
 
 void hack::loadSession(float* arg)
 {
-	if (m_global.initSessionPtr(m_hModule))
+	int id = (int)*arg;
+	if (id  == -1)
 	{
-		m_global.setSessionID((int)*arg);
-		m_global.setSessionTransition(1);
-		Sleep(400);
-		m_global.setSessionTransition(0);
+		scriptGlobal(1312425).at(2).as<int>() = id;
+		scriptGlobal(1312425).as<int>() = 1;
+		Sleep(200);
+		scriptGlobal(1312425).as<int>() = 0;
+	}
+	else
+	{
+		scriptGlobal(1312836).as<int>() = id;
+		scriptGlobal(1312425).as<int>() = 1;
+		Sleep(200);
+		scriptGlobal(1312425).as<int>() = 0;
 	}
 }
 
@@ -952,8 +988,6 @@ void hack::forwardTeleport(float* arg)
 
 void hack::spawnVehicle(float* arg)
 {
-	if (m_global.initVehiclePtr(m_hModule))
-	{
 		int vehTypeIndex = (int)*arg / 1000;
 		int vehIndex = (int)*arg % 1000;
 		m_player.getPos();
@@ -965,45 +999,60 @@ void hack::spawnVehicle(float* arg)
 		v3Pos.x += 6 * fAngle2;
 		v3Pos.y += 6 * fAngle;
 
-		m_global.setVehicleHash(joaat(vehiclePreview[vehTypeIndex].second[vehIndex].VCode));
-		m_global.setVehicleKickPrevent1(2);
-		m_global.setVehicleKickPrevent2(14);
-		m_global.setSecondaryColor(-1);
-		m_global.setPrimaryColor(-1);
-		m_global.setVehiclePosX(v3Pos.x);
-		m_global.setVehiclePosY(v3Pos.y);
-		m_global.setVehiclePosZ(-255);
+		auto vehicle = vehiclePreview[vehTypeIndex].second[vehIndex];
+
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(66).as<unsigned int>() = joaat(vehicle.VCode);
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(94).as<int>() = 2;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(95).as<int>() = 14;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(5).as<BYTE>() = -1;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(6).as<BYTE>() = -1;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(7).at(0).as<float>() = v3Pos.x;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(7).at(1).as<float>() = v3Pos.y;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(7).at(2).as<float>() = -255.0f;
+
 		if (true)
 		{
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 10, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 11, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 12, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 13, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 14, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 15, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 16, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 17, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 18, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 19, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 20, m_hModule), 1);
+			int* pTemp = (int*)malloc(sizeof(vehicle.VMod));
+			memcpy(pTemp, &vehicle.VMod, sizeof(vehicle.VMod));
 
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 21, m_hModule), 4);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 22, m_hModule), 3);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 23, m_hModule), 3);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 24, m_hModule), 57);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 25, m_hModule), 4);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 26, m_hModule), 5);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 28, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 30, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 32, m_hModule), 1);
-			g_pMemMan->writeMem<BYTE>(m_global.getGlobal(OFFSET_GLOBAL_VEHICLE_HASH + 27 + 65, m_hModule), 1);
-
-			g_pMemMan->writeMem<int>(m_global.getGlobal(2459034 + 27 + 77, m_hModule), 0xF0400200);
+			for (int i = 0; i < sizeof(vehicle.VMod) / sizeof(int); i++)
+			{
+				if (i < 17)
+				{
+					scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(10 + i).as<BYTE>() = pTemp[i];
+				}
+				else if (pTemp[42] > 0 && i == 42)
+				{
+					scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(10 + 6 + i).as<BYTE>() = rand() % pTemp[i] + 1;
+				}
+				else if (i > 22)
+				{
+					scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(10 + 6 + i).as<BYTE>() = pTemp[i];
+				}
+				else
+				{
+					continue;
+				}
+			}
+			free(pTemp);
+			scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(28).as<BYTE>() = 1;
+			scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(30).as<BYTE>() = 1;
+			scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(32).as<BYTE>() = 1;
+			scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(65).as<BYTE>() = 1;
+			scriptGlobal(GLOBAL_CREATE_VEHICLE).at(27).at(77).as<int>() = 0xF0400200;
 		}
 
-		m_global.setVehicleSpawn2(1);
-		m_global.setVehicleSpawn1(1);
-	}
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(5).as<int>() = 1;
+		scriptGlobal(GLOBAL_CREATE_VEHICLE).at(2).as<int>() = 1;
+}
+
+void hack::selfDropWeapon(float* arg)
+{
+	int weaponTypeIndex = (int)*arg / 1000;
+	int weaponIndex = (int)*arg % 1000;
+	auto weapon = weaponPreview[weaponTypeIndex].second[weaponIndex];
+	m_player.getPos();
+	createAmbientPickup(joaat(weapon.Pickup), m_player.m_v3Pos.x, m_player.m_v3Pos.y, m_player.m_v3Pos.z + 2, 9999, joaat("prop_cash_pile_01"));
 }
 
 void hack::selfDropMoney(feat* feature)
@@ -1012,23 +1061,17 @@ void hack::selfDropMoney(feat* feature)
 	{
 		m_bSelfDropInit = true;
 		std::thread t([=] {
-			while (true)
+			while (!g_bKillSwitch)
 			{
 				if (feature->m_bOn)
 				{
-					if (m_global.initMoneyPtr(m_hModule))
-					{
-						m_player.getPos();
-						m_global.setMoneyObject(1);
-						m_global.setMoneyVal(2000);
-						m_global.setMoneyPosX(m_player.m_v3Pos.x);
-						m_global.setMoneyPosY(m_player.m_v3Pos.y);
-						m_global.setMoneyPosZ(m_player.m_v3Pos.z + 5);
-						m_global.findMoneyPtr(m_hModule);
-						m_global.setMoneyCall(2);
-					}
+					if (scriptGlobal(GLOBAL_TUNEABLES).at(167).as<int>() != 10000)
+						scriptGlobal(GLOBAL_TUNEABLES).at(167).as<int>() = 10000;
+
+					m_player.getPos();
+					createAmbientPickup(joaat("PICKUP_MONEY_VARIABLE"), m_player.m_v3Pos.x, m_player.m_v3Pos.y, m_player.m_v3Pos.z + 5, 10000, joaat("p_poly_bag_01_s"));
 				}
-				Sleep(100);
+				Sleep(300);
 			}
 		});
 		t.detach();
@@ -1041,38 +1084,111 @@ void hack::dStatPushBack(unsigned int hash, int value)
 	this->m_dStat.push_back(std::pair<unsigned int, int>(hash, value));
 }
 
+void hack::callMerryweather(std::ptrdiff_t index)
+{
+	scriptGlobal(GLOBAL_MERRYWEATHER).at(index).as<int>() = 1;
+}
+
+int hack::getPlayerId()
+{
+	return scriptGlobal(2439138).as<int>().value();
+}
+
+int hack::getNetworkTime()
+{
+	return scriptGlobal(1312585).at(11).as<int>().value();
+}
+
+void hack::setCasinoHeistCut(int playerIndex, int cut)
+{
+	scriptGlobal(1700796).at(getPlayerId(), 68).at(12).at(1).at(playerIndex).as<int>() = cut;
+}
+
+int hack::getCasinoHeistCut(int playerIndex)
+{
+	return scriptGlobal(1700796).at(getPlayerId(), 68).at(12).at(1).at(playerIndex).as<int>().value();
+}
+
+void hack::createAmbientPickup(unsigned int pickupHash, float posX, float posY, float posZ, int value, unsigned int modelHash)
+{
+	scriptGlobal(2513247).at(1).as<int>() = value;
+	scriptGlobal(2513247).at(3).as<float>() = posX;
+	scriptGlobal(2513247).at(4).as<float>() = posY;
+	scriptGlobal(2513247).at(5).as<float>() = posZ;
+	scriptGlobal(4263954).at(scriptGlobal(2513247).as<int>().value(), 85).at(66).at(2).as<int>() = 2;
+	scriptGlobal(2513253).as<int>() = 1;
+
+	m_unkModel.getModelHash();
+	if (m_unkModel.m_dwModelHash != modelHash)
+		m_unkModel.setModelHash(modelHash);
+
+	Sleep(150);
+	m_replayInterface.getCurPedNum();
+	for (size_t i = 0; i < m_replayInterface.dw_curPickUpNum; i++)
+	{
+		DWORD_PTR dwpPickup, dwpPickupCur;
+		unsigned int dwPickupHash, dwModelHash;
+		g_pMemMan->readMem<DWORD_PTR>(m_replayInterface.m_dwpPickUpList + i * 0x10, &dwpPickup);
+		g_pMemMan->readMem<DWORD_PTR>(dwpPickup + 0x20, &dwpPickupCur);
+		g_pMemMan->readMem<unsigned int>(dwpPickupCur + 0x18, &dwModelHash);
+		g_pMemMan->readMem<unsigned int>(dwpPickup + OFFSET_REPLAY_PICKUP_HASH, &dwPickupHash);
+		if (dwPickupHash != pickupHash && dwModelHash == modelHash)
+		{
+			g_pMemMan->writeMem<unsigned int>(dwpPickup + OFFSET_REPLAY_PICKUP_HASH, pickupHash);
+			break;
+		}
+	}
+	m_unkModel.setModelHash(joaat("prop_cash_pile_01"));
+}
+
+void hack::blockScriptEvents(feat* feature, std::ptrdiff_t index)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() = 0;
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() != 1)
+		scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() = 1;
+
+	return;
+}
+
+unsigned int hack::string_to_hash(std::string input, std::string pre)
+{
+	return joaat(pre + input);
+}
+
 void hack::consumeStatQueue()
 {
 	if (!m_bInit)
 	{
 		m_bInit = true;
 		std::thread tConsumeStatQueue([=] {
-			while (true)
+			while (!g_bKillSwitch)
 			{
 				if (!m_dStat.empty())
 				{
 					g_pD3D9Render->m_bMBShowing = true;
-					g_pD3D9Render->m_sTitle = "正在处理队列";
-					g_pD3D9Render->m_sDetail = "剩余" + std::to_string(m_dStat.size()) + "个待处理";
-					if (m_global.initStatPtr(m_hModule))
-					{
-						m_global.getStatHash();
-						unsigned int resotreHash = m_global.m_dwStatHash;
-						m_global.getStatValue();
-						DWORD resotreValue = m_global.m_dwStatValue;
-						m_global.getStatCall();
-						DWORD call = m_global.m_dwStatCall;
+					g_pD3D9Render->m_sTitle = L"正在处理队列";
+					g_pD3D9Render->m_sDetail = L"剩余" + std::to_wstring(m_dStat.size()) + L"个待处理";
 
-						m_global.setStatHash(m_dStat.front().first);
-						m_global.setStatValue(m_dStat.front().second);
-						m_global.setStatCall(-1);
-						Sleep(1000);
-						m_global.setStatHash(resotreHash);
-						m_global.setStatValue(resotreValue);
-					}
+					unsigned int resotreHash = scriptGlobal(1387876).at(4).as<unsigned int>().value();
+					int resotreValue = scriptGlobal(939452).at(5526).as<int>().value();
+
+					scriptGlobal(1387876).at(4).as<unsigned int>() = m_dStat.front().first;
+					scriptGlobal(939452).at(5526).as<int>() = m_dStat.front().second;
+					scriptGlobal(1377170).at(1139).as<int>() = -1;
+					Sleep(1000);
+					scriptGlobal(1387876).at(4).as<unsigned int>() = resotreHash;
+					scriptGlobal(939452).at(5526).as<int>() = resotreValue;
 					m_dStat.pop_front();
 				}
-				else
+				else if (g_pD3D9Render->m_bMBShowing)
 				{
 					g_pD3D9Render->m_bMBShowing = false;
 				}
@@ -1088,7 +1204,7 @@ void hack::killAllNpc(float* arg)
 	m_replayInterface.initPeds();
 	for (size_t i = 0; i < m_replayInterface.dw_curPedNum; i++)
 	{
-		if (i == 10)
+		if (m_player.m_dwpBase == m_replayInterface.g_pPedList[i]->m_dwpBase)
 			continue;
 		m_replayInterface.g_pPedList[i]->getHealth();
 		if (m_replayInterface.g_pPedList[i]->m_cmHp.cur > 0)
@@ -1098,11 +1214,84 @@ void hack::killAllNpc(float* arg)
 	}
 }
 
-void hack::renderPlayerList(int parent,int playerList[32])
+void hack::tpAllNpc(float* arg)
+{
+	m_replayInterface.initPeds();
+	for (size_t i = 0; i < m_replayInterface.dw_curPedNum; i++)
+	{
+		if (m_player.m_dwpBase == m_replayInterface.g_pPedList[i]->m_dwpBase)
+			continue;
+
+		m_player.getPos();
+		m_replayInterface.g_pPedList[i]->setPos(m_player.m_v3Pos);
+	}
+}
+
+void hack::tpHostilityNpc(float* arg)
+{
+	m_replayInterface.initPeds();
+	for (size_t i = 0; i < m_replayInterface.dw_curPedNum; i++)
+	{
+		if (m_player.m_dwpBase == m_replayInterface.g_pPedList[i]->m_dwpBase)
+			continue;
+
+		DWORD dwHostility;
+		g_pMemMan->readMem<DWORD>(m_replayInterface.g_pPedList[i]->m_dwpBase + OFFSET_REPLAY_PED_HOSTILITY, &dwHostility);
+		if (dwHostility > 1)
+		{
+			m_player.getPos();
+			m_replayInterface.g_pPedList[i]->setPos(m_player.m_v3Pos);
+		}
+	}
+}
+
+void hack::killHostilityNpc(float* arg)
+{
+	m_replayInterface.initPeds();
+	for (size_t i = 0; i < m_replayInterface.dw_curPedNum; i++)
+	{
+		if (m_player.m_dwpBase == m_replayInterface.g_pPedList[i]->m_dwpBase)
+			continue;
+
+		DWORD dwHostility;
+		g_pMemMan->readMem<DWORD>(m_replayInterface.g_pPedList[i]->m_dwpBase + OFFSET_REPLAY_PED_HOSTILITY, &dwHostility);
+		if (dwHostility > 1) 
+			m_replayInterface.g_pPedList[i]->setHealth(0);
+	}
+}
+
+void hack::killHostilityNpcVeh(float* arg)
+{
+	m_replayInterface.initPeds();
+	for (size_t i = 0; i < m_replayInterface.dw_curPedNum; i++)
+	{
+		if (m_player.m_dwpBase == m_replayInterface.g_pPedList[i]->m_dwpBase)
+			continue;
+
+		DWORD dwHostility;
+		g_pMemMan->readMem<DWORD>(m_replayInterface.g_pPedList[i]->m_dwpBase + OFFSET_REPLAY_PED_HOSTILITY, &dwHostility);
+		if (dwHostility > 1)
+		{
+			DWORD_PTR dwpVehBase;
+			g_pMemMan->readMem<DWORD_PTR>(m_replayInterface.g_pPedList[i]->m_dwpBase + OFFSET_PLAYER_VEHICLE, &dwpVehBase);
+			if (dwpVehBase != 0)
+			{
+				vehicle veh;
+				veh.m_dwpBase = dwpVehBase;
+				g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpVehBase + OFFSET_ENTITY_POSBASE, &veh.m_dwpPosBase);
+				g_pMemMan->readMem<DWORD_PTR>((DWORD_PTR)dwpVehBase + OFFSET_VEHICLE_HANDLING, &veh.m_handlingCur.m_dwpHandling);
+
+				veh.setHealth(-1);
+			}
+		}
+	}
+}
+
+void hack::renderPlayerList()
 {
 	for (size_t i = 0; i < 32; i++)
 	{
-		g_pSettings->updataFeature(playerList[i], -1, parent, "玩家" + std::to_string(i), feat_teleport,tp_static, -1336.f, -3044.f, -225.f);
+		g_pSettings->updataFeature(g_iFeaturePlayerList[i], -1, g_iFeature[FEATURE_P_PLAYER_LIST], std::to_wstring(i) + L"玩家 >>", feat_parent);
 	}
 }
 
@@ -1343,9 +1532,9 @@ void hack::weaponBulletEdit(feat* feature)
 		}
 		return;
 	}
-	if (m_weapon.m_weapDataCur.m_dwImpactType != 0 && m_weapon.m_weapDataCur.m_dwImpactType != ImpactTypeEnum::Fists)
+	if (m_weapon.m_weapDataCur.m_dwImpactType != ImpactTypeEnum::Explosives)
 		m_weapon.setImpactType(ImpactTypeEnum::Explosives);
-	if (m_weapon.m_weapDataCur.m_dwImpactType != 0 && m_explosion != 0)
+	if (m_weapon.m_weapDataCur.m_dwImpactExplosion !=  m_explosion)
 		m_weapon.setImpactExplosion(m_explosion);
 	return;
 }
@@ -1430,8 +1619,9 @@ void hack::godMode(feat* feature)
 
 void hack::frameFlags(feat* featSuperJump, feat* featExplosiveMelee, feat* featFireAmmo, feat* featExplosiveAmmo)
 {
+	if (!featSuperJump->m_bOn && !featExplosiveMelee->m_bOn && !featFireAmmo->m_bOn && !featExplosiveAmmo->m_bOn)
+		return;
 	DWORD dwValue = 0;
-	m_player.getFrameFlags();
 	if (featSuperJump->m_bOn)
 		dwValue += 64;
 	if (featExplosiveMelee->m_bOn)
@@ -1440,8 +1630,7 @@ void hack::frameFlags(feat* featSuperJump, feat* featExplosiveMelee, feat* featF
 		dwValue += 16;
 	if (featExplosiveAmmo->m_bOn)
 		dwValue += 8;
-	if (m_player.m_dwFrameFlags != dwValue)
-		m_player.setFrameFlags(dwValue);
+	m_player.setFrameFlags(dwValue);
 	return;
 }
 
@@ -1474,7 +1663,7 @@ void hack::infAmmo(feat* feature)
 			g_pMemMan->readMem<BYTE>((DWORD_PTR)m_hModule + ADDRESS_AMMO, cur, sizeof(BYTE) * 3, PAGE_EXECUTE_READWRITE);
 			BYTE	value[3] = { 0x41, 0x2B, 0xD1 };
 			if (cur[0] != value[0])
-				g_pMemMan->writeMem<BYTE>((DWORD_PTR)m_hModule + ADDRESS_AMMO, value, sizeof(BYTE) * 3, PAGE_EXECUTE_READWRITE);
+				g_pMemMan->writeMem<BYTE>((DWORD_PTR)m_hModule + ADDRESS_AMMO, value , sizeof(BYTE) * 3, PAGE_EXECUTE_READWRITE);
 			feature->m_bRestored = true;
 		}
 		return;
@@ -2083,15 +2272,263 @@ void hack::tunableAntiIdleKick(feat* feature)
 	return;
 }
 
+void hack::removeSuicideCooldown(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			scriptGlobal(262145).at(27617).as<int>() = 300000;
+			scriptGlobal(262145).at(27618).as<int>() = 60000;
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(2537071).at(6599).as<int>() != -1)
+		scriptGlobal(2537071).at(6599).as<int>() = -1;
+	if (scriptGlobal(262145).at(27617).as<int>() != 0)
+		scriptGlobal(262145).at(27617).as<int>() = 0;
+	if (scriptGlobal(262145).at(27618).as<int>() != 0)
+		scriptGlobal(262145).at(27618).as<int>() = 0;
+
+	return;
+}
+
+void hack::removePassiveModeCooldown(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(2537071).at(4393).as<int>() != 0)
+		scriptGlobal(2537071).at(4393).as<int>() = 0;
+	if (scriptGlobal(1696236).as<int>() != 0)
+		scriptGlobal(1696236).as<int>() = 0;
+
+	return;
+}
+
+void hack::allowSellOnNonPublic(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(2450632).at(644).as<int>() != 0)
+		scriptGlobal(2450632).at(644).as<int>() = 0;
+
+	return;
+}
+
+void hack::instantBullShark(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			scriptGlobal(2439138).at(3895).as<int>() = 5;
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(2439138).at(3895).as<int>() == 0)
+		scriptGlobal(2439138).at(3895).as<int>() = 5;
+
+	return;
+}
+
+void hack::bullSharkDrop(float* arg)
+{
+	callMerryweather(841);
+}
+
+void hack::ammoDrop(float* arg)
+{
+	callMerryweather(833);
+}
+
+void hack::miniGunDrop(float* arg)
+{
+	callMerryweather(843);
+}
+
+void hack::boatTaxi(float* arg)
+{
+	callMerryweather(834);
+}
+
+void hack::heliTaxi(float* arg)
+{
+	callMerryweather(835);
+}
+
+void hack::backupHeli(float* arg)
+{
+	callMerryweather(4389);
+}
+
+void hack::airstrike(float* arg)
+{
+	callMerryweather(4390);
+}
+
+void hack::offRadar(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			scriptGlobal(2425662).at(getPlayerId(), 421).at(200).as<int>() = 0;
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(2425662).at(getPlayerId(), 421).at(200).as<int>() == 0)
+	{
+		// Ghost organization
+		//scriptGlobal(2537071).at(4561).as<int>() = 22;
+		//scriptGlobal(262145).at(12674).as<int>() = 6000000;
+		scriptGlobal(2425662).at(getPlayerId(), 421).at(200).as<int>() = 1;
+		scriptGlobal(2439138).at(70).as<int>() = getNetworkTime();
+	}
+
+	return;
+}
+
+void hack::disableThePhone(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	if (scriptGlobal(6671).as<int>() > 0)
+	{
+		scriptGlobal(2543673).at(37).as<int>() = 1;
+		scriptGlobal(6671).as<int>() = 0;
+	}
+
+	return;
+}
+
+void hack::antiCEOKick(feat* feature)
+{
+	blockScriptEvents(feature, 570);
+	return;
+}
+
+void hack::antiKickToSP(feat* feature)
+{
+	static const ptrdiff_t offests[] = { 6,16,20,21,22,23,24,52,327,369,479,483,489,491,529,533,566,578,591,609,610,611,616,618,633,634,637,643,644,645,647,693,722,733,739,749,771 };
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			for (auto index : offests) {
+				scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() = 0;
+			}
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	for (auto index : offests) {
+		if (scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() != 1)
+			scriptGlobal(GLOBAL_BLOCK_SCRIPT_EVENTS).at(index).as<int>() = 1;
+	}
+
+	return;
+}
+
+void hack::antiApartmentTp(feat* feature)
+{
+	blockScriptEvents(feature, 533);
+	return;
+}
+
+void hack::antiRemoteBounty(feat* feature)
+{
+	blockScriptEvents(feature, 70);
+	return;
+}
+
+void hack::antiWeatherControl(feat* feature)
+{
+	blockScriptEvents(feature, 17);
+	return;
+}
+
+void hack::antiRemoteVehicleKick(feat* feature)
+{
+	blockScriptEvents(feature, 63);
+	return;
+}
+
+void hack::antiRemoteForceMission(feat* feature)
+{
+	blockScriptEvents(feature, 722);
+	return;
+}
+
+void hack::triggerBot(feat* feature)
+{
+	if (!feature->m_bOn)
+	{
+		if (!feature->m_bRestored)
+		{
+			if (m_bMouseDown)
+			{
+				LMouseUp();
+				m_bMouseDown = false;
+			}
+			feature->m_bRestored = true;
+		}
+		return;
+	}
+	DWORD dwTrigger;// 0 = Nothing, 1 = Hostile, 2 = Friendly, 3 = Dead/Invincible
+	g_pMemMan->readMem<DWORD>((DWORD_PTR)m_hModule + ADDRESS_TRIGGER, &dwTrigger);
+	if (dwTrigger == 1 || dwTrigger == 2)
+	{
+		if (!m_bMouseDown)
+		{
+			LMouseDown();
+			m_bMouseDown = true;
+		}
+	}
+	else
+	{
+		if (m_bMouseDown)
+		{
+			LMouseUp();
+			m_bMouseDown = false;
+		}
+	}
+
+	return;
+}
+
 void hack::about(float* arg)
 {
 	switch ((int)*arg)
 	{
 	case 0:
-		WinExec("explorer.exe https://github.com/AmazingPP/subVerison_GTAV_Hack", SW_NORMAL);
+		WinExec("explorer.exe https://github.com/AmazingPP/subVerison_GTAV_Hack", SW_SHOW);
 		break;
 	case 1:
-		WinExec("explorer.exe https://github.com/AmazingPP/subVerison_GTAV_Hack/releases", SW_NORMAL);
+		WinExec("explorer.exe https://github.com/AmazingPP/subVerison_GTAV_Hack/releases", SW_SHOW);
+		break;
+	case 2:
+		WinExec("explorer.exe https://github.com/AmazingPP/subVerison_GTAV_Hack/blob/master/README.md#%E6%8D%90%E8%B5%A0", SW_SHOW);
 		break;
 	default:
 		break;

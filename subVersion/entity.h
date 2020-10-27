@@ -410,121 +410,14 @@ class tunable
 		DWORD_PTR	m_dwpTunableBase;
 };
 
-
-class global
-{
-	public:
-		DWORD_PTR	m_dwpStatHash,
-					m_dwpStatValue,
-					m_dwpStatCall,
-					m_dwpMoneyObject,
-					m_dwpMoneyVal,
-					m_dwpMoneyPosX,
-					m_dwpMoneyPosY,
-					m_dwpMoneyPosZ,
-					m_dwpMoneyCall,
-					m_dwpSessionTransition,
-					m_dwpSessionID,
-					m_dwpIntoPersonalVehicle,
-					m_dwpVehicleSpawn1,
-					m_dwpVehicleSpawn2,
-					m_dwpVehicleHash,
-					m_dwpVehicleKickPrevent1,
-					m_dwpVehicleKickPrevent2,
-					m_dwpVehicleX,
-					m_dwpVehicleY,
-					m_dwpVehicleZ,
-					m_dwpPrimaryColor,
-					m_dwpSecondaryColor;
-
-		unsigned int	m_dwStatHash,
-						m_dwVehicleHash,
-						m_dwStatHashSet;
-		int				m_dwStatValue,
-						m_dwStatCall,
-						m_dwMoneyVal,
-						m_dwSessionTransition,
-						m_dwSessionID,
-						m_dwIntoPersonalVehicle,
-						m_dwVehicleSpawn1,
-						m_dwVehicleSpawn2,
-						m_dwVehicleKickPrevent1,
-						m_dwVehicleKickPrevent2;
-		float			m_fMoneyPosX,
-						m_fMoneyPosY,
-						m_fMoneyPosZ,
-						m_fVehicleX,
-						m_fVehicleY,
-						m_fVehicleZ;
-		BYTE			m_btMoneyObject,
-						m_btMoneyCall,
-						m_btPrimaryColor,
-						m_btSecondaryColor;
-			
-				global();
-				~global();
-		bool	initStatPtr(HMODULE base);
-		bool	initMoneyPtr(HMODULE base);
-		bool	initSessionPtr(HMODULE base);
-		bool	initIntoPVPtr(HMODULE base);
-		bool	initVehiclePtr(HMODULE base);
-		bool	findMoneyPtr(HMODULE base);
-		void	getStatHash();
-		void	setStatHash(unsigned int value);
-		void	getStatValue();
-		void	setStatValue(int value);
-		void	getStatCall();
-		void	setStatCall(int value);
-		void	getMoneyObject();
-		void	setMoneyObject(BYTE value);
-		void	getMoneyVal();
-		void	setMoneyVal(int value);
-		void	getMoneyPosX();
-		void	setMoneyPosX(float value);
-		void	getMoneyPosY();
-		void	setMoneyPosY(float value);
-		void	getMoneyPosZ();
-		void	setMoneyPosZ(float value);
-		void	getMoneyCall();
-		void	setMoneyCall(BYTE value);
-		void	getSessionTransition();
-		void	setSessionTransition(int value);
-		void	getSessionID();
-		void	setSessionID(int value);
-		void	getIntoPersonalVehicle();
-		void	setIntoPersonalVehicle(int value);
-		void	getVehicleSpawn1();
-		void	setVehicleSpawn1(int value);
-		void	getVehicleSpawn2();
-		void	setVehicleSpawn2(int value);
-		void	getVehicleHash();
-		void	setVehicleHash(unsigned int value);
-		void	getVehicleKickPrevent1();
-		void	setVehicleKickPrevent1(int value);
-		void	getVehicleKickPrevent2();
-		void	setVehicleKickPrevent2(int value);
-		void	getVehiclePosX();
-		void	setVehiclePosX(float value);
-		void	getVehiclePosY();
-		void	setVehiclePosY(float value);
-		void	getVehiclePosZ();
-		void	setVehiclePosZ(float value);
-		void	getPrimaryColor();
-		void	setPrimaryColor(BYTE value);
-		void	getSecondaryColor();
-		void	setSecondaryColor(BYTE value);
-
-		DWORD_PTR getGlobal(int value, HMODULE base);
-
-		DWORD_PTR	m_dwpGlobalBase;
-};
-
-
 class replayInterface
 {
 public:
 		entity	*g_pPedList[256];
-		DWORD	dw_curPedNum;
+		entity	*g_pPickUpList[73];
+		DWORD	dw_curPedNum,
+				dw_curPickUpNum;
+		void	getCurPedNum();
 
 				replayInterface();
 				~replayInterface();
@@ -533,6 +426,22 @@ public:
 
 	DWORD_PTR	m_dwpReplayInterfaceBase,
 				m_dwpPedInterface,
-				m_dwpPedList;
+				m_dwpPedList,
+				m_dwpPickUpInterface,
+				m_dwpPickUpList;
+};
+
+class unkModel
+{
+public:
+	unsigned int m_dwModelHash;
+	void	getModelHash();
+	void	setModelHash(unsigned int value);
+
+	unkModel();
+	~unkModel();
+
+	DWORD_PTR	m_dwpUnkModelBase,
+				m_dwpUnkModelStruct;
 };
 #endif

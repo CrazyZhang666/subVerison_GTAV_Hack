@@ -17,9 +17,6 @@
     with subVersion GTA:O SC External Hack.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-//#define __SC_VERSION__
-//#define __STEAM_VERSION__
-
 #ifndef STDAFX_H
 #define STDAFX_H
 
@@ -37,6 +34,7 @@
 #include <thread>
 #include <deque>
 #include <cmath>
+#include <tchar.h>
 
 #include <Dwmapi.h>
 #pragma comment(lib,"Dwmapi.lib")
@@ -56,7 +54,7 @@
 #include "hack.h"
 #include "CallbackProxy.h"
 #include "VehiclePreview.h"
-
+#include "WeaponPreview.h"
 
 //offset from WORLD
 #define OFFSET_PLAYER					0x08			//playerbase
@@ -75,11 +73,11 @@
 
 //player (entity) offsets
 #define OFFSET_PLAYER_VEHICLE					0xD28			//ptr to last used vehicle
-#define OFFSET_NET_PLAYER_INFO					0xA8
+#define OFFSET_NET_PLAYER_INFO					0xB0
 #define OFFSET_PLAYER_INFO						0x10C8			//playerInfo struct
 #define OFFSET_PLAYER_INFO_NAME					0x84
-#define OFFSET_PLAYER_INFO_SWIM_SPD				0x148			//swim speed; def 1; float
-#define	OFFSET_PLAYER_INFO_RUN_SPD				0x14C			//run speed; def 1; float
+#define OFFSET_PLAYER_INFO_SWIM_SPD				0x150			//swim speed; def 1; float
+#define	OFFSET_PLAYER_INFO_RUN_SPD				0xCD0			//run speed; def 1; float
 #define OFFSET_PLAYER_INFO_FRAMEFLAGS			0x1F9			//frame flags; DWORD
 #define OFFSET_PLAYER_INFO_WANTED_CAN_CHANGE	0x71C			//fWantedCanChange
 #define OFFSET_PLAYER_INFO_NPC_IGNORE			0x850			//npc ignore; DWORD; everyone = 0x450000;
@@ -148,8 +146,8 @@
 #define OFFSET_WEAPON_AMMOINFO_CUR_2	0x00			//ptr tr lvl 2, ptr 1
 #define OFFSET_WEAPON_AMMOINFO_CURAMMO	0x18			//offset to cur ammo
 #define OFFSET_WEAPON_AMMOINFO_TYPE		0x0C			//offset to projectile type?
-#define OFFSET_WEAPON_SPREAD			0x7C			//float set to 0
-#define OFFSET_WEAPON_BULLET_DMG		0xBC			//float times 10 (so when 0, it will stay 0)
+#define OFFSET_WEAPON_SPREAD			0x74			//float set to 0
+#define OFFSET_WEAPON_BULLET_DMG		0xB0			//float times 10 (so when 0, it will stay 0)
 #define OFFSET_WEAPON_RELOAD_MULTIPLIER	0x134			//float times 10
 #define OFFSET_WEAPON_RECOIL			0x2F4			//float set to 0
 #define OFFSET_WEAPON_MODEL_HASH		0x14
@@ -176,20 +174,30 @@
 #define OFFSET_TUNABLE_ANTI_IDLE_KICK2			0x2C8
 #define OFFSET_TUNABLE_ANTI_IDLE_KICK3			0x2D0
 #define OFFSET_TUNABLE_ANTI_IDLE_KICK4			0x2D8
-#define OFFSET_TUNABLE_ORBITAL_CANNON_COOLDOWN	0x2C128			//OrbitalCannonCooldown;DWORD
+#define OFFSET_TUNABLE_ORBITAL_CANNON_COOLDOWN	0x2C188			//OrbitalCannonCooldown;DWORD
 #define OFFSET_TUNABLE_BUNKER_RESEARCH			0x29BB8			//UnlockAllBunkerResearch;DWORD
 
 
 #define OFFSET_ATTACKER_DISTANCE		0x18			//changed to 0x18, from 0x10
 
 //replay interface offsets
+#define OFFSET_REPLAY_VEHICLE_INTERFACE		0x10
 #define OFFSET_REPLAY_PED_INTERFACE			0x18
-#define OFFSET_PED_INTERFACE_PED_LIST		0x100
-#define OFFSET_PED_INTERFACE_CUR_PEDS		0x110
+#define OFFSET_REPLAY_PICKUP_INTERFACE		0x20
+#define OFFSET_INTERFACE_LIST				0x100
+#define OFFSET_INTERFACE_CUR_NUMS			0x110
+#define OFFSET_REPLAY_PICKUP_HASH			0x488
+#define OFFSET_REPLAY_PED_HOSTILITY			0x18C
 
-//global offsets
-#define OFFSET_GLOBAL_VEHICLE_HASH		2460715
+//unk model
+#define OFFSET_MODEL_HASH		0x2640
 
+//globals
+#define GLOBAL_TUNEABLES		262145
+#define GLOBAL_CREATE_VEHICLE		2460715
+#define GLOBAL_MERRYWEATHER		2537071
+#define GLOBAL_BLOCK_SCRIPT_EVENTS	1391799
+#define GLOBAL_BUSINESS			1590535
 
 //feature indexing
 #define FEATURE_P_GOD				0x00
@@ -257,25 +265,84 @@
 #define FEATURE_T_ANTI_IDLE_KICK	0x40
 #define FEATURE_P_PLAYER_LIST		0x41
 #define FEATURE_P_MONERY_DROP		0x42
+#define FEATURE_G_CASINO_CUT_0		0x43
+#define FEATURE_G_CASINO_CUT_1		0x44
+#define FEATURE_G_CASINO_CUT_2		0x45
+#define FEATURE_G_CASINO_CUT_3		0x46
+#define FEATURE_G_DISABLE_THE_PHONE	0x47
+#define FEATURE_G_PASSIVE_CD		0x48
+#define FEATURE_G_SEEL_NON_PUB		0x49
+#define FEATURE_G_ANTI_KICK			0x4A
+#define FEATURE_G_ANTI_TP			0x4B
+#define FEATURE_G_ANTI_BOUNTY		0x4C
+#define FEATURE_G_ANTI_WEATHER		0x4D
+#define FEATURE_G_ANTI_VEH_KICK		0x4E
+#define FEATURE_G_ANTI_SEND_MISSION 0x4F
+#define FEATURE_G_OFF_RADAR			0x50
+#define FEATURE_G_BULL_SHARK		0x51
+#define FEATURE_G_ANTI_CEO_KICK		0x52
+#define FEATURE_T_SUICIDE_CD		0x53
+#define FEATURE_W_TRIGGER_BOT		0x54
+
+static std::wstring StringToWString(const std::string& str) {
+	int num = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+	wchar_t* wide = new wchar_t[num];
+	MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, wide, num);
+	std::wstring w_str(wide);
+	delete[] wide;
+	return w_str;
+}
+
+static unsigned int joaat(std::string input)
+{
+	unsigned int num1 = 0U;
+	for (char c : input)
+	{
+		unsigned int num2 = num1 + (unsigned int)tolower(c);
+		unsigned int num3 = num2 + (num2 << 10);
+		num1 = num3 ^ num3 >> 6;
+	}
+	unsigned int num4 = num1 + (num1 << 3);
+	unsigned int num5 = num4 ^ num4 >> 11;
+	return num5 + (num5 << 15);
+}
 
 void	killProgram	();
 DWORD	strToVk(std::string str);
 
+static void LMouseDown(){
+	INPUT    Input = { 0 };
+	Input.type = INPUT_MOUSE;
+	Input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+	::SendInput(1, &Input, sizeof(INPUT));
+}
+
+static void LMouseUp() {
+	INPUT    Input = { 0 };
+	Input.type = INPUT_MOUSE;
+	Input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
+	::SendInput(1, &Input, sizeof(INPUT));
+}
+
 extern HWND		g_hWnd;
 extern int		g_iFeature[MAX_MENU_FEATURES];
+extern int		g_iIndex;
+extern int		g_iFeaturePlayerList[32];
 
 extern bool		g_bKillSwitch;
 extern bool		g_bKillRender;
 extern bool		g_bKillAttach;
 extern bool		g_bKillHack;
+extern bool		g_bKillKeys;
 //Addresses from GTAV.exe module
 extern long     ADDRESS_WORLD;				//48 8B 05 ? ? ? ? 45 ? ? ? ? 48 8B 48 08 48 85 C9 74 07
 extern long		ADDRESS_BLIP;				//4C 8D 05 ? ? ? ? 0F B7 C1
 extern long		ADDRESS_AMMO;				//Ammo dec code; 41 2B D1 E8; 90 90 90 E8
 extern long		ADDRESS_MAGAZINE;			//Magazine dec code; 41 2B C9 3B C8 0F; 90 90 90 3B C8 0F
 extern long		ADDRESS_TUNABLE;
-extern long		ADDRESS_WEAPON;
+extern long		ADDRESS_TRIGGER;
 extern long		ADDRESS_GLOBAL;				//4C 8D 05 ? ? ? ? 4D 8B 08 4D 85 C9 74 11
 extern long		ADDRESS_PLAYER_LIST;		//48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B C8 E8 ? ? ? ? 48 8B CF
 extern long		ADDRESS_REPLAY_INTERFACE;	//48 8D 0D ? ? ? ? 48 8B D7 E8 ? ? ? ? 48 8D 0D ? ? ? ? 8A D8 E8 ? ? ? ? 84 DB 75 13 48 8D 0D ? ? ? ?
+extern long		ADDRESS_UNK_MODEL;			//4C 8B 15 ? ? ? ? 49 8B 04 D2 44 39 40 08
 #endif
