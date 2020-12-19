@@ -52,7 +52,6 @@
 #include "settings.h"
 #include "entity.h"
 #include "hack.h"
-#include "CallbackProxy.h"
 #include "VehiclePreview.h"
 #include "WeaponPreview.h"
 
@@ -70,9 +69,10 @@
 #define OFFSET_ENTITY_HEALTH			0x280			//entity health (except for vehicles); float cur, float max
 #define OFFSET_ENTITY_HEALTH_MAX		0x2A0			//they moved this away from curHealth in 1.36 :(
 #define OFFSET_ENTITY_ATTACKER			0x2A8			//base to a list of the last 3 entities that attacked the current entity
+#define OFFSET_ENTITY_MODEL_INFO		0x20			//CBaseModelInfo
 
 //player (entity) offsets
-#define OFFSET_PLAYER_VEHICLE					0xD28			//ptr to last used vehicle
+#define OFFSET_PLAYER_VEHICLE					0xD30			//ptr to last used vehicle
 #define OFFSET_NET_PLAYER_INFO					0xB0
 #define OFFSET_PLAYER_INFO						0x10C8			//playerInfo struct
 #define OFFSET_PLAYER_INFO_NAME					0x84
@@ -136,6 +136,7 @@
 #define	OFFSET_VEHICLE_CUSTOM_TYRE_SMOKE_G			0x3FD			//btTyreSmokeGreen
 #define	OFFSET_VEHICLE_CUSTOM_TYRE_SMOKE_B			0x3FE			//btTyreSmokeBlue
 #define	OFFSET_VEHICLE_CUSTOM_LIMO_WINDOWS			0x3FF			//btLimoWindows; 0x1 = on
+#define OFFSET_VEHICLE_MODEL_INFO_JUMP_ROCK			0x58B			//btJumpOrRock; 0x0 = off; 0x20 = JumpingCar; 0x40 = RocketBoot;  0x42 = Oppressor;
 
 //weapon offsets
 #define OFFSET_WEAPON_MANAGER			0x10D8			//from playerbase
@@ -165,19 +166,6 @@
 #define OFFSET_WEAPON_FORCE_ON_VEHICLE	0xE0			//fForceOnVehicle(Bullet Mass)
 #define OFFSET_WEAPON_FORCE_ON_HELI		0xE4			//fForceOnHeli
 
-
-//tunable offsets
-#define OFFSET_TUNABLE_RP_MULTIPLIER			0x10
-#define OFFSET_TUNABLE_AP_MULTIPLIER			0x30F80
-#define OFFSET_TUNABLE_MIN_MISSION_PAYOUT		0x4BC8			//fMinMissionPayout
-#define OFFSET_TUNABLE_ANTI_IDLE_KICK1			0x2C0			//AFK;DWORD;2000000000 = Anti idle kick
-#define OFFSET_TUNABLE_ANTI_IDLE_KICK2			0x2C8
-#define OFFSET_TUNABLE_ANTI_IDLE_KICK3			0x2D0
-#define OFFSET_TUNABLE_ANTI_IDLE_KICK4			0x2D8
-#define OFFSET_TUNABLE_ORBITAL_CANNON_COOLDOWN	0x2C188			//OrbitalCannonCooldown;DWORD
-#define OFFSET_TUNABLE_BUNKER_RESEARCH			0x29BB8			//UnlockAllBunkerResearch;DWORD
-
-
 #define OFFSET_ATTACKER_DISTANCE		0x18			//changed to 0x18, from 0x10
 
 //replay interface offsets
@@ -193,11 +181,12 @@
 #define OFFSET_MODEL_HASH		0x2640
 
 //globals
-#define GLOBAL_TUNEABLES		262145
-#define GLOBAL_CREATE_VEHICLE		2460715
-#define GLOBAL_MERRYWEATHER		2537071
-#define GLOBAL_BLOCK_SCRIPT_EVENTS	1391799
+#define GLOBAL_TUNEABLES		0x40001
+#define GLOBAL_CREATE_VEHICLE		2462286
+#define GLOBAL_MERRYWEATHER		2540384
+#define GLOBAL_BLOCK_SCRIPT_EVENTS	1391942
 #define GLOBAL_BUSINESS			1590535
+#define GLOBAL_SESSION			1312443
 
 //feature indexing
 #define FEATURE_P_GOD				0x00
@@ -251,18 +240,17 @@
 #define FEATURE_V_BOOST				0x32
 #define FEATURE_V_RECHARGE_SPEED	0x33
 #define FEATURE_V_HEAL				0x34
-#define FEATURE_T_RP_MP				0x35
-#define FEATURE_T_AP_MP				0x36
-#define FEATURE_T_MISSION_PAYOUT	0x37
+#define FEATURE_G_RP_MP				0x35
+#define FEATURE_G_MISSION_PAYOUT	0x37
 #define FEATURE_W_FILL_ALL_AMMO		0x38
 #define FEATURE_W_FORCE_ON_PED		0x39
 #define FEATURE_W_FORCE_ON_VEHICLE	0x3A
 #define FEATURE_W_FORCE_ON_HELI		0x3B
 #define FEATURE_W_BULLET_EDIT		0x3C
 #define FEATURE_P_NPC_IGNORE		0x3D
-#define FEATURE_T_ORBITAL_CANNON	0x3E
-#define FEATURE_T_BUNKER_RESEARCH	0x3F
-#define FEATURE_T_ANTI_IDLE_KICK	0x40
+#define FEATURE_G_ORBITAL_CANNON	0x3E
+#define FEATURE_G_BUNKER_RESEARCH	0x3F
+#define FEATURE_G_ANTI_IDLE_KICK	0x40
 #define FEATURE_P_PLAYER_LIST		0x41
 #define FEATURE_P_MONERY_DROP		0x42
 #define FEATURE_G_CASINO_CUT_0		0x43
@@ -339,10 +327,10 @@ extern long     ADDRESS_WORLD;				//48 8B 05 ? ? ? ? 45 ? ? ? ? 48 8B 48 08 48 8
 extern long		ADDRESS_BLIP;				//4C 8D 05 ? ? ? ? 0F B7 C1
 extern long		ADDRESS_AMMO;				//Ammo dec code; 41 2B D1 E8; 90 90 90 E8
 extern long		ADDRESS_MAGAZINE;			//Magazine dec code; 41 2B C9 3B C8 0F; 90 90 90 3B C8 0F
-extern long		ADDRESS_TUNABLE;
 extern long		ADDRESS_TRIGGER;
 extern long		ADDRESS_GLOBAL;				//4C 8D 05 ? ? ? ? 4D 8B 08 4D 85 C9 74 11
 extern long		ADDRESS_PLAYER_LIST;		//48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B C8 E8 ? ? ? ? 48 8B CF
 extern long		ADDRESS_REPLAY_INTERFACE;	//48 8D 0D ? ? ? ? 48 8B D7 E8 ? ? ? ? 48 8D 0D ? ? ? ? 8A D8 E8 ? ? ? ? 84 DB 75 13 48 8D 0D ? ? ? ?
 extern long		ADDRESS_UNK_MODEL;			//4C 8B 15 ? ? ? ? 49 8B 04 D2 44 39 40 08
+extern long		ADDRESS_FRAME_FLAGS;		//Frame flags 0 writer dec code; 89 0B 48 8B 7B 10 32 D2 EB 19 39 0F 74 11 84 D2 75 09 8B 17 E8 47 C8 FF FF; 90 90
 #endif
