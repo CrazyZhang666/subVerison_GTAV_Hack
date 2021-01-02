@@ -40,16 +40,16 @@ bool		g_bKillAttach	= false;
 bool		g_bKillHack		= false;
 bool		g_bKillKeys		= false;
 
-long		ADDRESS_WORLD		= 0;
-long		ADDRESS_BLIP		= 0;
-long		ADDRESS_AMMO		= 0;
-long		ADDRESS_MAGAZINE	= 0;
-long		ADDRESS_TRIGGER		= 0;
-long		ADDRESS_GLOBAL		= 0;
-long		ADDRESS_PLAYER_LIST = 0;
-long		ADDRESS_REPLAY_INTERFACE = 0;
-long		ADDRESS_UNK_MODEL	= 0;
-long		ADDRESS_FRAME_FLAGS = 0;
+uintptr_t	ADDRESS_WORLD		= 0;
+uintptr_t	ADDRESS_BLIP		= 0;
+uintptr_t	ADDRESS_AMMO		= 0;
+uintptr_t	ADDRESS_MAGAZINE	= 0;
+uintptr_t	ADDRESS_AIMING_PED	= 0;
+uintptr_t	ADDRESS_GLOBAL		= 0;
+uintptr_t	ADDRESS_PLAYER_LIST = 0;
+uintptr_t	ADDRESS_REPLAY_INTERFACE = 0;
+uintptr_t	ADDRESS_UNK_MODEL	= 0;
+uintptr_t	ADDRESS_FRAME_FLAGS = 0;
 //fuction prototypes
 LRESULT	__stdcall	WindowProc(	HWND	hWnd,
 								UINT	message,
@@ -78,7 +78,7 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 	g_pHack			= new hack;
 
 	LPCSTR	szWindowTitleTarget	= "Grand Theft Auto V";
-	LPCWSTR	szWindowTitle		= L"subVersion mAsk°重制版 v1.3.5";
+	LPCWSTR	szWindowTitle		= L"subVersion mAsk°重制版 v1.3.5.2";
 	g_pMemMan->setWindowName(szWindowTitleTarget);
 	g_pD3D9Render->m_szWindowTitle = szWindowTitle;
 
@@ -247,6 +247,7 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 	g_iFeature[FEATURE_G_RP_MP]			   = g_pSettings->addFeature(-1, tunable, L"RP倍数", feat_slider,"RP", 1.f, 1000.f , (float)1.f / 9.f);
 	g_iFeature[FEATURE_G_MISSION_PAYOUT]   = g_pSettings->addFeature(-1, tunable, L"最小任务金额", feat_slider, "MinMissionPayout", 0.f, 100000.f);
 	int recovery = g_pSettings->addFeature(-1, olService, L"解锁&恢复 >>", feat_parent);
+	g_iFeature[FEATURE_R_MP_INDEX] = g_pSettings->addFeature(-1, recovery, L"切换角色 [当前：1]", feat_toggle, "mpIndex");
 	int rank = g_pSettings->addFeature(-1, recovery, L"修改等级(切换战局后生效) >>", feat_parent);
 
 	constexpr int rank_list[] = { 1,20,30,50,100,120,200,520,666,888,6666,8000 };
@@ -274,8 +275,8 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 	g_pSettings->addFeature(-1, bitSet2, L"一键解锁、最高等级", feat_btn, &hack::casinoStatBitSet2, 11);
 	g_pSettings->addFeature(-1, bitSet2, L"削弱敌人装备", feat_btn, &hack::casinoStatBitSet2, 0);
 	g_pSettings->addFeature(-1, bitSet2, L"钥匙卡最高级", feat_btn, &hack::casinoStatBitSet2, 1);
-	g_pSettings->addFeature(-1, bitSet2, L"最高级枪手", feat_btn, &hack::casinoStatBitSet2, 2);
-	g_pSettings->addFeature(-1, bitSet2, L"最高级司机", feat_btn, &hack::casinoStatBitSet2, 3);
+	g_pSettings->addFeature(-1, bitSet2, L"最低分红枪手", feat_btn, &hack::casinoStatBitSet2, 2);
+	g_pSettings->addFeature(-1, bitSet2, L"最低分红司机", feat_btn, &hack::casinoStatBitSet2, 3);
 	g_pSettings->addFeature(-1, bitSet2, L"最高级黑客", feat_btn, &hack::casinoStatBitSet2, 4);
 	int vehs = g_pSettings->addFeature(-1, bitSet2, L"逃亡载具 >>", feat_parent);
 	g_pSettings->addFeature(-1, vehs, L"0", feat_btn, &hack::casinoStatBitSet2, 5);
@@ -290,6 +291,41 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 	g_iFeature[FEATURE_G_CASINO_CUT_1] = g_pSettings->addFeature(-1, casinoCut, L"玩家2", feat_slider, "casinoCut1", 0.f, 85.f, (float)1.f / 9.f);
 	g_iFeature[FEATURE_G_CASINO_CUT_2] = g_pSettings->addFeature(-1, casinoCut, L"玩家3", feat_slider, "casinoCut2", 0.f, 85.f, (float)1.f / 9.f);
 	g_iFeature[FEATURE_G_CASINO_CUT_3] = g_pSettings->addFeature(-1, casinoCut, L"玩家4", feat_slider, "casinoCut3", 0.f, 85.f, (float)1.f / 9.f);
+
+	int perico = g_pSettings->addFeature(-1, recovery, L"佩里科岛 >>", feat_parent);
+	g_pSettings->addFeature(-1, perico, L"直接开启终章", feat_btn, &hack::pericoStat);
+	int bitSet3 = g_pSettings->addFeature(-1, perico, L"解锁条目【情报】 >>", feat_parent);
+	g_pSettings->addFeature(-1, bitSet3, L"解锁所有逃离点", feat_btn, &hack::pericoStatBitSet1, 8);
+	g_pSettings->addFeature(-1, bitSet3, L"解锁所有豪宅入口", feat_btn, &hack::pericoStatBitSet1, 6);
+	g_pSettings->addFeature(-1, bitSet3, L"解锁所有兴趣点", feat_btn, &hack::pericoStatBitSet1, 5);
+	g_pSettings->addFeature(-1, bitSet3, L"解锁团队支持", feat_btn, &hack::pericoStatBitSet1, 7);
+	int secondary = g_pSettings->addFeature(-1, bitSet3, L"解锁次要目标 >>", feat_parent);
+	g_pSettings->addFeature(-1, secondary, L"所有现金", feat_btn, &hack::pericoStatBitSet1, 0);
+	g_pSettings->addFeature(-1, secondary, L"所有黄金", feat_btn, &hack::pericoStatBitSet1, 1);
+	g_pSettings->addFeature(-1, secondary, L"所有大麻", feat_btn, &hack::pericoStatBitSet1, 2);
+	g_pSettings->addFeature(-1, secondary, L"所有可卡因", feat_btn, &hack::pericoStatBitSet1, 3);
+	g_pSettings->addFeature(-1, secondary, L"所有艺术品", feat_btn, &hack::pericoStatBitSet1, 4);
+	int primary = g_pSettings->addFeature(-1, bitSet3, L"主要目标 >>", feat_parent);
+	g_pSettings->addFeature(-1, primary, L"龙舌兰酒", feat_btn, &hack::pericoStatBitSet1, 9);
+	g_pSettings->addFeature(-1, primary, L"红宝石项链", feat_btn, &hack::pericoStatBitSet1, 10);
+	g_pSettings->addFeature(-1, primary, L"无名债券", feat_btn, &hack::pericoStatBitSet1, 11);
+	g_pSettings->addFeature(-1, primary, L"粉红钻石", feat_btn, &hack::pericoStatBitSet1, 12);
+	g_pSettings->addFeature(-1, primary, L"Madrazo文件", feat_btn, &hack::pericoStatBitSet1, 13);
+	g_pSettings->addFeature(-1, primary, L"黑豹雕像", feat_btn, &hack::pericoStatBitSet1, 14);
+	int bitSet4 = g_pSettings->addFeature(-1, perico, L"解锁条目【前置】 >>", feat_parent);
+	int interfere = g_pSettings->addFeature(-1, bitSet4, L"解锁干扰 >>", feat_parent);
+	g_pSettings->addFeature(-1, interfere, L"武器", feat_btn, &hack::pericoStatBitSet2, 6);
+	g_pSettings->addFeature(-1, interfere, L"防弹衣", feat_btn, &hack::pericoStatBitSet2, 7);
+	g_pSettings->addFeature(-1, interfere, L"空中支援", feat_btn, &hack::pericoStatBitSet2, 8);
+	int weapss = g_pSettings->addFeature(-1, bitSet4, L"武器选择 >>", feat_parent);
+	g_pSettings->addFeature(-1, weapss, L"侵略者套装", feat_btn, &hack::pericoStatBitSet2, 1);
+	g_pSettings->addFeature(-1, weapss, L"阴谋者套装", feat_btn, &hack::pericoStatBitSet2, 2);
+	g_pSettings->addFeature(-1, weapss, L"神枪手套装", feat_btn, &hack::pericoStatBitSet2, 3);
+	g_pSettings->addFeature(-1, weapss, L"破坏者套装", feat_btn, &hack::pericoStatBitSet2, 4);
+	g_pSettings->addFeature(-1, weapss, L"神射手套装", feat_btn, &hack::pericoStatBitSet2, 5);
+	g_pSettings->addFeature(-1, bitSet4, L"获取抓钩", feat_btn, &hack::pericoStatBitSet2, 9);
+	g_pSettings->addFeature(-1, bitSet4, L"替换衣服", feat_btn, &hack::pericoStatBitSet2, 10);
+	g_pSettings->addFeature(-1, bitSet4, L"螺丝切割", feat_btn, &hack::pericoStatBitSet2, 11);
 	int unlock = g_pSettings->addFeature(-1, recovery, L"解锁 >>", feat_parent);
 	g_pSettings->addFeature(-1, unlock, L"解锁改车配件", feat_btn, &hack::unlockLSC);
 	g_pSettings->addFeature(-1, unlock, L"解锁武器涂装", feat_btn, &hack::unlockWeaponCamos);
@@ -297,6 +333,7 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 	g_pSettings->addFeature(-1, unlock, L"解锁奖章", feat_btn, &hack::unlockAllAwards);
 	g_pSettings->addFeature(-1, unlock, L"解锁衣服", feat_btn, &hack::unlockClothes);
 	g_iFeature[FEATURE_G_BUNKER_RESEARCH] = g_pSettings->addFeature(-1, unlock, L"解锁所有地堡研究(临时)", feat_toggle, "BunkerResearch");
+
 	int merryweather = g_pSettings->addFeature(-1, olService, L"梅利威瑟 >>", feat_parent);
 	int dropWeapon = g_pSettings->addFeature(-1, olService, L"获得武器 >>", feat_parent);
 	for (int i = 0; i < weaponPreview.size(); i++)
@@ -366,6 +403,7 @@ int __stdcall WinMain(	HINSTANCE	hInstance,
 
 	ShowWindow(g_hWnd, SW_SHOWNORMAL);
 
+	g_pMemMan->attach();
 	CreateThread(	NULL,
 					0,
 					threadAttach,
@@ -489,7 +527,7 @@ DWORD __stdcall	threadKeys(LPVOID lpParam)
 
 DWORD __stdcall threadHack(LPVOID lpParam)
 {
-	g_pHack->m_hModule = g_pMemMan->getModuleAddress("GTA5.exe");
+	g_pHack->m_hModule = g_pMemMan->getModule().hModule;
 	while(!g_bKillSwitch)
 	{
 		BYTE btInit	= g_pHack->initPointers();
@@ -600,11 +638,12 @@ DWORD __stdcall threadHack(LPVOID lpParam)
 				g_pHack->tunableOrbitalCannonCooldown(g_pSettings->getFeature(g_iFeature[FEATURE_G_ORBITAL_CANNON]));
 				g_pHack->tunableBunkerResearch(g_pSettings->getFeature(g_iFeature[FEATURE_G_BUNKER_RESEARCH]));
 				g_pHack->tunableAntiIdleKick(g_pSettings->getFeature(g_iFeature[FEATURE_G_ANTI_IDLE_KICK]));
+				g_pHack->mpIndex(g_pSettings->getFeature(g_iFeature[FEATURE_R_MP_INDEX]));
 
 				g_pHack->consumeStatQueue();
 			}
 		}
-		Sleep(1);
+		Sleep(10);
 	}
 	g_bKillHack = true;
 	return 0;

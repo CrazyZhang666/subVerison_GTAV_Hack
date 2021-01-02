@@ -32,9 +32,12 @@
 #include <string>
 #include <map>
 #include <thread>
+#include <future>
 #include <deque>
 #include <cmath>
 #include <tchar.h>
+#include <TlHelp32.h>
+#include <functional>
 
 #include <Dwmapi.h>
 #pragma comment(lib,"Dwmapi.lib")
@@ -48,6 +51,7 @@
 
 #include "vector.h"
 #include "memManager.h"
+#include "patternBatch.h"
 #include "D3D9Render.h"
 #include "settings.h"
 #include "entity.h"
@@ -84,7 +88,7 @@
 #define OFFSET_PLAYER_INFO_WANTED				0x868			//wanted level; DWORD
 #define OFFSET_PLAYER_INFO_STAMINA				0xCD4			//fStamina, fStaminaMax
 #define OFFSET_PLAYER_RAGDOLL					0x10B8			//byte; CPed.noRagdoll: 0x20 = off; 0x00/0x01 = on
-#define OFFSET_PLAYER_SEATBELT					0xC00			//byte; CPed.seatBelt: 0xC8 = off; 0xC9 = on
+#define OFFSET_PLAYER_SEATBELT					0x140C			//byte; CPed.seatBelt: 0xC8 = off; 0xC9 = on
 #define OFFSET_PLAYER_INVEHICLE					0x1477
 #define OFFSET_PLAYER_ARMOR						0x14E0			//armour
 #define OFFSET_PLAYER_WATER_PROOF				0x188			//water proof; DWORD; +0x1000000 = on
@@ -241,6 +245,7 @@
 #define FEATURE_V_RECHARGE_SPEED	0x33
 #define FEATURE_V_HEAL				0x34
 #define FEATURE_G_RP_MP				0x35
+#define FEATURE_R_MP_INDEX			0x36
 #define FEATURE_G_MISSION_PAYOUT	0x37
 #define FEATURE_W_FILL_ALL_AMMO		0x38
 #define FEATURE_W_FORCE_ON_PED		0x39
@@ -272,7 +277,8 @@
 #define FEATURE_T_SUICIDE_CD		0x53
 #define FEATURE_W_TRIGGER_BOT		0x54
 
-static std::wstring StringToWString(const std::string& str) {
+static std::wstring StringToWString(const std::string& str)
+{
 	int num = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
 	wchar_t* wide = new wchar_t[num];
 	MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, wide, num);
@@ -298,14 +304,16 @@ static unsigned int joaat(std::string input)
 void	killProgram	();
 DWORD	strToVk(std::string str);
 
-static void LMouseDown(){
+static void LMouseDown()
+{
 	INPUT    Input = { 0 };
 	Input.type = INPUT_MOUSE;
 	Input.mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
 	::SendInput(1, &Input, sizeof(INPUT));
 }
 
-static void LMouseUp() {
+static void LMouseUp()
+{
 	INPUT    Input = { 0 };
 	Input.type = INPUT_MOUSE;
 	Input.mi.dwFlags = MOUSEEVENTF_LEFTUP;
@@ -323,14 +331,14 @@ extern bool		g_bKillAttach;
 extern bool		g_bKillHack;
 extern bool		g_bKillKeys;
 //Addresses from GTAV.exe module
-extern long     ADDRESS_WORLD;				//48 8B 05 ? ? ? ? 45 ? ? ? ? 48 8B 48 08 48 85 C9 74 07
-extern long		ADDRESS_BLIP;				//4C 8D 05 ? ? ? ? 0F B7 C1
-extern long		ADDRESS_AMMO;				//Ammo dec code; 41 2B D1 E8; 90 90 90 E8
-extern long		ADDRESS_MAGAZINE;			//Magazine dec code; 41 2B C9 3B C8 0F; 90 90 90 3B C8 0F
-extern long		ADDRESS_TRIGGER;
-extern long		ADDRESS_GLOBAL;				//4C 8D 05 ? ? ? ? 4D 8B 08 4D 85 C9 74 11
-extern long		ADDRESS_PLAYER_LIST;		//48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B C8 E8 ? ? ? ? 48 8B CF
-extern long		ADDRESS_REPLAY_INTERFACE;	//48 8D 0D ? ? ? ? 48 8B D7 E8 ? ? ? ? 48 8D 0D ? ? ? ? 8A D8 E8 ? ? ? ? 84 DB 75 13 48 8D 0D ? ? ? ?
-extern long		ADDRESS_UNK_MODEL;			//4C 8B 15 ? ? ? ? 49 8B 04 D2 44 39 40 08
-extern long		ADDRESS_FRAME_FLAGS;		//Frame flags 0 writer dec code; 89 0B 48 8B 7B 10 32 D2 EB 19 39 0F 74 11 84 D2 75 09 8B 17 E8 47 C8 FF FF; 90 90
+extern uintptr_t    ADDRESS_WORLD;				//48 8B 05 ? ? ? ? 45 ? ? ? ? 48 8B 48 08 48 85 C9 74 07
+extern uintptr_t	ADDRESS_BLIP;				//4C 8D 05 ? ? ? ? 0F B7 C1
+extern uintptr_t	ADDRESS_AMMO;				//Ammo dec code; 41 2B D1 E8; 90 90 90 E8
+extern uintptr_t	ADDRESS_MAGAZINE;			//Magazine dec code; 41 2B C9 3B C8 0F; 90 90 90 3B C8 0F
+extern uintptr_t	ADDRESS_AIMING_PED;			//48 8B 0D ? ? ? ? 48 85 C9 74 0C 48 8D 15 ? ? ? ? E8 ? ? ? ? 48 89 1D ? ? ? ?
+extern uintptr_t	ADDRESS_GLOBAL;				//4C 8D 05 ? ? ? ? 4D 8B 08 4D 85 C9 74 11
+extern uintptr_t	ADDRESS_PLAYER_LIST;		//48 8B 0D ? ? ? ? E8 ? ? ? ? 48 8B C8 E8 ? ? ? ? 48 8B CF
+extern uintptr_t	ADDRESS_REPLAY_INTERFACE;	//48 8D 0D ? ? ? ? 48 8B D7 E8 ? ? ? ? 48 8D 0D ? ? ? ? 8A D8 E8 ? ? ? ? 84 DB 75 13 48 8D 0D ? ? ? ?
+extern uintptr_t	ADDRESS_UNK_MODEL;			//4C 8B 15 ? ? ? ? 49 8B 04 D2 44 39 40 08
+extern uintptr_t	ADDRESS_FRAME_FLAGS;		//Frame flags 0 writer dec code; 89 0B 48 8B 7B 10 32 D2 EB 19 39 0F 74 11 84 D2 75 09 8B 17 E8 47 C8 FF FF; 90 90
 #endif
